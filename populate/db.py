@@ -1,4 +1,6 @@
 from pymongo import MongoClient
+
+
 def db_session(func):
     result = [None]
 
@@ -20,7 +22,18 @@ class DbOperation:
         self.database = database
 
     def connect(self):
-        self.database.client = MongoClient(self.database.auth["url"])
+        if self.database.auth.get("url") is not None:
+            self.database.client = MongoClient(self.database.auth["url"])
+        else:
+            port = self.database.auth.get("port")
+            if port is not None:
+                port = int(port)
+            self.database.client = MongoClient(
+                host=self.database.auth.get("host"),
+                port=port,
+                username=self.database.auth.get("username"),
+                password=self.database.auth.get("password"),
+            )
 
     def check_collection_exists(self, collection_name, operation_name="CHECK COLLECTION EXISTS"):
         return collection_name in self.database.list_collection_names()
@@ -31,8 +44,11 @@ class DbOperation:
     def drop_collection(self, collection, operation_name="DROP COLLECTION"):
         return collection.drop()
 
-    def insert_data(self, collection, data, operation_name="INSERT DATA"):
-        return collection.insert_many(data, session=self.session)
+    def insert_data(self, collection, data, operation_name="INSERT DATA", use_session=True):
+        if use_session:
+            return collection.insert_many(data, session=self.session)
+        else:
+            return collection.insert_many(data)
 
     def update_data(self, collection, data, operation_name="UPDATE DATA"):
         return collection.update({"_id": data["_id"]}, data)

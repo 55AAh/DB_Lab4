@@ -7,6 +7,7 @@ from user import get_env, panic, PANIC_DATA_FOLDER_DOESNT_EXIST
 class Fs:
     def __init__(self):
         self.data_folder = get_env("DATA_FOLDER")
+        self.query_folder = get_env("QUERY_FOLDER")
         self.schema = None
         self.data_files = None
 

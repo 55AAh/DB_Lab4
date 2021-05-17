@@ -10,7 +10,7 @@ env_vars = dict()
 
 
 def use_env_files():
-    if os.environ.get("DB_HOST") == "db":
+    if get_env("MONGO_HOST", required=False) is not None:
         return
     lines = []
     with open("../db-auth.env", "r") as f:
@@ -22,12 +22,13 @@ def use_env_files():
         env_vars[name.strip()] = value.strip()
 
 
-def get_env(var_name):
+def get_env(var_name, required=True):
     value = os.environ.get(var_name)
     if value is None:
-        if var_name not in env_vars:
+        if var_name in env_vars:
+            return env_vars[var_name]
+        if required:
             panic(f"Environment variable '{var_name}' is not defined!", PANIC_ENV_VAR_NOT_DEFINED)
-        return env_vars[var_name]
     return value
 
 

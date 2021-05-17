@@ -1,0 +1,28 @@
+version: "3.8"
+services:
+  populate:
+    container_name: populate
+    build: ./populate/
+    env_file:
+      - db-auth.env
+      - populate_conf.env
+    environment:
+      - MONGO_HOST=db
+      - DATA_FOLDER=data
+      - QUERY_FOLDER=query
+    volumes:
+      - ./populate/data:/populate/data
+      - ./populate/query:/populate/query
+    depends_on:
+      - db
+
+  db:
+    container_name: db
+    build: ./db/
+    ports:
+      - 27017
+    volumes:
+      - /db/data:/data/db
+
+volumes:
+  mongo-data:

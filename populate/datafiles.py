@@ -1,6 +1,7 @@
 import os
 
 DATA_FOLDER = "data"
+QUERY_FOLDER = "query"
 ENCODINGS = ["utf-8-sig", "cp1251", "utf-8"]
 
 

@@ -1,4 +1,5 @@
 import pymongo
+import os
 from fs import Fs
 from db import Db, DbOperation, db_session
 from datafiles import get_file_encoding, get_file_size, format_file_size, strip, strip_arr, read_file
@@ -7,8 +8,12 @@ from user import get_env, print_flush, is_panic
 
 class Populate:
     def __init__(self):
-        auth = dict(url=get_env("MONGO_URL"),
-                    db_name=get_env("MONGO_DBNAME"))
+        auth = dict(url=get_env("MONGO_URL", required=False),
+                    host=get_env("MONGO_HOST", required=False),
+                    port=get_env("MONGO_PORT", required=False),
+                    db_name=get_env("MONGO_DBNAME"),
+                    username=get_env("MONGO_INITDB_ROOT_USERNAME", required=False),
+                    password=get_env("MONGO_INITDB_ROOT_PASSWORD", required=False))
         self.target_collection_name = get_env("TARGET_COLLECTION_NAME")
         self.target_collection = None
         self.aux_collection_name = get_env("AUX_COLLECTION_NAME")
@@ -74,11 +79,23 @@ class Populate:
     def start(self):
         @db_session
         def _get_entries(session, db):
+            target_collection = self.get_target_collection(session, db)
+            dummy = target_collection.find_one({"dummy": 0})
+            if dummy is None:
+                DbOperation(session, db).insert_data(target_collection,
+                                                     [{"dummy": 0}], "INSERT TARGET DUMMY", use_session=False)
             aux_collection = self.get_aux_collection(session, db)
             return aux_collection.find().sort("tr_id", pymongo.DESCENDING)
 
         entries = _get_entries(self)
         if entries.count() == 0:
+            @db_session
+            def _delete_dummy(session, db):
+                target_collection = self.get_target_collection(session, db)
+                dummy = target_collection.find_one({"dummy": 0})
+                if dummy is not None:
+                    DbOperation(session, db).delete_data(target_collection, dummy, "INSERT TARGET DUMMY")
+            _delete_dummy(self)
             self.drop_aux()
             return True
 
@@ -189,14 +206,35 @@ class Populate:
                     "header": "",
                     "tr_id": 0}
                     for file, year in self.fs.data_files],
-                "FILL AUX COLLECTION")
+                "FILL AUX COLLECTION", use_session=False)
             return False
 
         return _prepare(self)
 
     def do_query(self):
+        print_flush("Executing query...", end="")
         @db_session
         def _do_query(session, db):
             target_collection = self.get_target_collection(session, db)
-            return
-        return _do_query(self)
+            result = target_collection.aggregate([
+                {"$match": {"$or": [{"year": 2019}, {"year": 2020}], "PHYSTESTSTATUS": "Зараховано"}},
+                {"$group": {
+                    "_id": {
+                        "year": "$year",
+                        "REGNAME": "$REGNAME",
+                    },
+                    "max_ball": {"$max": "$PHYSBALL100"}
+                }}
+            ])
+            stats = dict()
+            for r in result:
+                if r["_id"]["REGNAME"] not in stats:
+                    stats[r["_id"]["REGNAME"]] = dict()
+                stats[r["_id"]["REGNAME"]][r["_id"]["year"]] = float(r["max_ball"].replace(",", "."))
+            return stats
+        stats = _do_query(self)
+        with open(os.path.join(self.fs.query_folder, "query_result.csv"), "w") as f:
+            f.write("Region,MaxPhysBall100_2019,MaxPhysBall100_2020\n")
+            for s in stats.items():
+                f.write(f"{s[0]},{s[1].get(2019)},{s[1].get(2020)}\n")
+        print_flush(" done!")
